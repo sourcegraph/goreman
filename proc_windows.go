@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"os/signal"
-	"syscall"
 
 	"golang.org/x/sys/windows"
 )
@@ -27,7 +26,7 @@ func terminateProc(proc string, _ os.Signal) error {
 		return err
 	}
 	r1, _, err := f.Call(uintptr(pid))
-	if r1 == 0 && err != syscall.ERROR_ACCESS_DENIED {
+	if r1 == 0 && err != windows.ERROR_ACCESS_DENIED {
 		return err
 	}
 
