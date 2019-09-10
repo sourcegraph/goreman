@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+type ProcError struct {
+	Proc string
+	Err  error
+}
+
+func (e *ProcError) Error() string { return e.Proc + ": " + e.Err.Error() }
+func (e *ProcError) Unwrap() error { return e.Err }
+
 // spawnProc starts the specified proc, and returns any error from running it.
 func spawnProc(proc string, errCh chan<- error) {
 	procObj := procs[proc]
@@ -28,7 +36,7 @@ func spawnProc(proc string, errCh chan<- error) {
 
 	if err := cmd.Start(); err != nil {
 		select {
-		case errCh <- err:
+		case errCh <- &ProcError{proc, err}:
 		default:
 		}
 		fmt.Fprintf(logger, "Failed to start %s: %s\n", proc, err)
@@ -38,6 +46,9 @@ func spawnProc(proc string, errCh chan<- error) {
 	procObj.stoppedBySupervisor = false
 	procObj.mu.Unlock()
 	err := cmd.Wait()
+	if err != nil {
+		err = &ProcError{proc, err}
+	}
 	procObj.mu.Lock()
 	procObj.cond.Broadcast()
 	if err != nil && procObj.stoppedBySupervisor == false {
@@ -170,6 +181,12 @@ func startProcs(sc <-chan os.Signal, rpcCh <-chan *rpcMessage, exitOnError bool)
 			}
 		case err := <-errCh:
 			if exitOnError {
+				var procError *ProcError
+				if errors.As(err, &procError) {
+					fmt.Printf("Failed at proc %s: %v\n", procError.Proc, procError.Err)
+				} else {
+					fmt.Println(err)
+				}
 				stopProcs(os.Interrupt)
 				return err
 			}
